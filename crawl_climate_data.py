@@ -13,11 +13,6 @@ CSV_DATA_DIR = 'data/csv'
 BASE_URL = 'https://en.tutiempo.net'
 BASE_CLIMATE_URL = BASE_URL + '/climate'
 
-START_YEAR = 1900
-END_YEAR = 2021
-START_MONTH = 1
-END_MONTH = 12
-
 HTML_CLASSES_TO_NUMBERS = {
     'ntio': '-', 'ntjj': '-', 'ntzz': '-', 'ntkf': '-',
     'ntyc': '.', 'ntkk': '.', 'ntvr': '.', 'ntux': '.',
@@ -90,13 +85,51 @@ def construct_climate_url(month, year, city_link):
 
     return climate_url
 
+def get_available_years(CITY_LINK):
+    years = []
+    raw_html = requests.get(BASE_URL + CITY_LINK, verify = False).text.encode('utf=8') # warning: no cert configuration
+    html_soup = BeautifulSoup(raw_html, 'html.parser')
+    html_data_table_type_1 = html_soup.find('div', class_='mlistados')
+    html_data_table_type_2 = html_soup.find('table', class_='medias')
+
+    a_tags = []
+    if (html_data_table_type_1 is not None):
+        a_tags = html_data_table_type_1.find_all('a')
+    elif (html_data_table_type_2 is not None):
+        a_tags = html_data_table_type_2.find_all('a')
+    
+    if len(a_tags) > 0:
+        for a_tag in a_tags:
+            year = a_tag['href'].split('/')[2]
+            years.append(int(year))
+    
+    return years
+
+def get_available_months(YEAR, CITY_LINK):
+    months = []
+    city_id = CITY_LINK.split('/')[2]
+    raw_html = requests.get('{}/{}/{}'.format(BASE_CLIMATE_URL, YEAR, city_id), verify = False).text.encode('utf=8') # warning: no cert configuration
+    html_soup = BeautifulSoup(raw_html, 'html.parser')
+    html_data_table = html_soup.find('div', class_='mlistados')
+    a_tags = html_data_table.find_all('a')
+
+    for a_tag in a_tags:
+        month = a_tag['href'].split('/')[2].split('-')[0].lstrip('0')
+        months.append(int(month))
+    
+    return months
+
 def crawl_climate_data(city_link, STORE_PATH):
     climate_url = ''
 
-    # adjust later
-    for year in range(1900, 1901):
-        for month in range(1, 2):
+    available_years = get_available_years(city_link)
+
+    for year in available_years:
+        available_months = get_available_months(year, city_link)
+
+        for month in available_months:
             climate_url = construct_climate_url(month, year, city_link)
+            print(climate_url)
             raw_html = requests.get(climate_url, verify = False).text.encode('utf=8') # warning: no cert configuration
             html_soup = BeautifulSoup(raw_html, 'html.parser')
             html_data_table = html_soup.find('table', class_='medias mensuales numspan')
@@ -129,28 +162,35 @@ def crawl_climate_data(city_link, STORE_PATH):
                         f.write(html_row.get_text(','))
                         f.write('\n')
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
     init()
     store_path = ''
     continents = get_continents()
     countries = []
 
     start_time = time.time()
-
+    
+    temp1 = ''
+    temp2 = ''
     for continent_k, continent_v in continents.items():
         store_path = CSV_DATA_DIR + '/' + continent_k
+        temp1 = store_path
         countries = get_countries(continent_v['href'])
 
+        print(continent_k, end=" ")
         for country_k, country_v in countries.items():
-            store_path += '/' + country_k
+            store_path = temp1 + '/' + country_k
+            temp2 = store_path
             cities = get_cities(country_v['href'])
-
+            
+            print(country_k, end=" ")
             for city_k, city_v in cities.items():
-                store_path += '/' + city_k
+                store_path = temp2 + '/' + city_k
 
                 if not os.path.exists(store_path):
                     os.makedirs(store_path)
                 
+                print(city_k, end=" ")
                 crawl_climate_data(city_v['href'], store_path)
 
     stop_time = time.time()
