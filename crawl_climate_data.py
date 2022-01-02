@@ -3,6 +3,7 @@ import os
 import requests
 import time
 from requests.api import get
+from requests.sessions import Request
 import urllib3
 
 # disable SSL Cert warning when running requests.get()
@@ -123,6 +124,12 @@ def crawl_climate_data(city_link, STORE_PATH):
     climate_url = ''
 
     available_years = get_available_years(city_link)
+    available_months = ''
+    climate_url = ''
+    raw_html = ''
+    html_soup = ''
+    html_data_table= ''
+    html_rows = ''
 
     for year in available_years:
         available_months = get_available_months(year, city_link)
@@ -130,7 +137,14 @@ def crawl_climate_data(city_link, STORE_PATH):
         for month in available_months:
             climate_url = construct_climate_url(month, year, city_link)
             print(climate_url)
-            raw_html = requests.get(climate_url, verify = False).text.encode('utf=8') # warning: no cert configuration
+
+            raw_html = ''
+            while raw_html == '':
+                try:
+                    raw_html = requests.get(climate_url, verify=False, timeout=5).text.encode('utf=8') # warning: no cert configuration
+                except requests.exceptions.Timeout:
+                    continue
+
             html_soup = BeautifulSoup(raw_html, 'html.parser')
             html_data_table = html_soup.find('table', class_='medias mensuales numspan')
 
@@ -179,12 +193,15 @@ if __name__ == '__main__':
 
         print(continent_k, end=" ")
         for country_k, country_v in countries.items():
+            if (country_k == 'Albania'):
+                continue
             store_path = temp1 + '/' + country_k
             temp2 = store_path
             cities = get_cities(country_v['href'])
-            
             print(country_k, end=" ")
             for city_k, city_v in cities.items():
+                if os.path.exists('data/csv/{}/{}/{}'.format(continent_k, country_k, city_k)):
+                    continue
                 store_path = temp2 + '/' + city_k
 
                 if not os.path.exists(store_path):
